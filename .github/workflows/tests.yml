@@ -1,0 +1,40 @@
+---
+name: Run Tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  release:
+    types: [released]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        django-version: ["4.2", "5.0", "5.1", "5.2"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: uv sync --all-extras --frozen
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      - name: Run tests
+        run: |
+          task test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4

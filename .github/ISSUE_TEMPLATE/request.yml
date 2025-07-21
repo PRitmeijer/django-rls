@@ -1,0 +1,65 @@
+name: ❓ Bug / Feature / Question
+description: One template for bugs, features, and questions
+title: "[Issue]: "
+labels: ["triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # Prerequisites
+        *Feel free to just say what you want and remove this template.*
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Checklist
+      options:
+        - label: Is it a bug?
+        - label: Is it a new feature?
+        - label: Is it a question?
+        - label: Can you reproduce the problem?
+        - label: Are you running the latest version?
+        - label: Did you check for similar issues?
+        - label: Did you perform a cursory search?
+
+  - type: input
+    id: contributing
+    attributes:
+      label: Reference link (optional)
+      description: See [CONTRIBUTING.md](https://github.com/pritmeijer/django-rls/blob/master/CONTRIBUTING.md)
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the bug, feature, or question here.
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: |
+        If this is a bug, please provide a step-by-step reproduction.
+        Alternatively, you can link a repo with the code to run your issue.
+      placeholder: |
+        1. [First Step]
+        2. [Second Step]
+        3. [and so on...]
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened.
+
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Package versions (`pip freeze`)
+      description: Paste the packages you are using. You can run `pip freeze` and copy the output here.

@@ -1,0 +1,14 @@
+[run]
+source = django_rls
+omit = .venv/**,tests/migrations/**,manage.py, docs/**,  quickstart/**, setup.py, migrate.py
+
+[report]
+precision = 2
+exclude_lines =
+    pragma: nocover
+    pragma:nocover
+    if TYPE_CHECKING:
+    @overload
+    @abstractmethod
+    @abc.abstractmethod
+    assert_never

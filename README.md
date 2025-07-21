@@ -1,2 +1,2 @@
-# strawberry-django-rls
- Row Level Security with Django using Strawberry
+# django-rls
+Django extension for PostgreSQL Row-Level Security (RLS)

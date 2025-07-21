@@ -1,0 +1,35 @@
+name: 🦺 MyPy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "django_rls/**"
+      - "tests/**"
+      - ".github/workflows/mypy.yml"
+env:
+  IS_GITHUB_ACTION: 1
+
+jobs:
+  mypy:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: uv sync --all-extras --frozen
+
+      - name: mypy checks
+        run: uv run mypy ./django_rls
