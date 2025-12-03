@@ -28,9 +28,14 @@ jobs:
         if: steps.check_release.outputs.status == ''
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
+          if [ -z "$PYPI_TOKEN" ]; then
+            echo "Error: PYPI_TOKEN secret is not set. Please configure it in repository settings."
+            exit 1
+          fi
           git remote set-url origin https://${{ secrets.BOT_TOKEN }}@github.com/${{ github.repository }}
           cd .github && uv run python -m workflows.management release
           cd ..
           uv build
-          uv publish --token ${{ secrets.PYPI_TOKEN }}
+          uv publish --token "$PYPI_TOKEN"
