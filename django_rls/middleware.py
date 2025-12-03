@@ -32,12 +32,13 @@ class RLSMiddleware(MiddlewareMixin):
             return
 
         # 1. Bypass check
+        rls_context: Dict[str, RLSValue]
         if rls_settings.BYPASS_CHECK_RESOLVER(request):
-            rls_context: Dict[str, RLSValue] = {
+            rls_context = {
                 field: RlsWildcard.ALL for field in rls_settings.RLS_FIELDS
             }
         else:
-            rls_context: Dict[str, RLSValue] = rls_settings.REQUEST_RESOLVER(request)
+            rls_context = rls_settings.REQUEST_RESOLVER(request)
 
         # 2. Validate resolver return values
         # Warn if resolver returns fields not in RLS_FIELDS

@@ -9,4 +9,4 @@ Features:
 - Configurable bypass checks for superusers and special cases
 - Safe migration handling with dedicated database users
 - Middleware-based RLS enforcement for Django views and GraphQL
-
+- Git flow for lib
