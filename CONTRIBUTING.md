@@ -33,31 +33,44 @@ pip install tox
 
 ## Running tests
 
-After developing, you can run tests with:
+All tests use PostgreSQL by default since RLS is a PostgreSQL-only feature. The project includes automated PostgreSQL testing via Docker Compose.
+
+**Quick start:**
 
 ```bash
-# python=3.7 and django=3.0
-make test
+# Run all tests (automatically starts/stops PostgreSQL)
+task test
+
+# Or manually:
+docker-compose up -d postgres
+pytest
+docker-compose down
 ```
 
-You can specify versions, for the full list see the `tox.ini` file.
+**Available commands:**
 
 ```bash
-# python=3.6 and django=2.2
-make test p=36 d=22
+# Run tests (starts PostgreSQL, runs tests, stops PostgreSQL)
+task test
+
+# Run tests but keep PostgreSQL container running
+task test:keep-running
+
+# Start PostgreSQL container manually
+task postgresql:up
+
+# Stop PostgreSQL container manually
+task postgresql:down
 ```
 
-Test directly with tox:
+**Environment variables:**
+
+You can override PostgreSQL connection settings via environment variables:
 
 ```bash
-tox
-```
-
-Single file test shortcut:
-
-```bash
-# run only tests in tests/test_register.py
-make test-file f=register
+POSTGRES_HOST=localhost POSTGRES_PORT=5432 \
+POSTGRES_DB=testdb POSTGRES_USER=testuser POSTGRES_PASSWORD=testpass \
+pytest
 ```
 
 For live testing on a django project, you can use the testproject.

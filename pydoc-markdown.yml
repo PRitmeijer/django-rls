@@ -1,0 +1,17 @@
+loaders:
+  - type: python
+    packages:
+      - django_rls
+    search_path: [.]
+
+processors:
+  - type: filter
+    expression: "not name.startswith('_') or name == '__init__'"
+  - type: smart
+  - type: google
+
+renderer:
+  type: markdown
+  render_toc: true
+  descriptive_class_title: true
+

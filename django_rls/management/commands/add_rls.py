@@ -1,33 +1,28 @@
 import os
 import re
 import glob
+import textwrap
+from typing import List
 from django.conf import settings as django_settings
 from django.apps import apps
 from django.core.management import call_command, BaseCommand, CommandError
+from django.core.exceptions import FieldDoesNotExist
 
 from django_rls.settings_type import DjangoRLSSettings
 from django_rls.constants import RlsWildcard
+from django_rls.utils import build_rls_using_clause, get_field_sql_type
 
 
 class Command(BaseCommand):
     help = (
-        "Creates a migration that adds a row-level security (RLS) policy to a model "
-        "based on fields selected from ENFORCE_FIELDS.\n"
-        "Usage: manage.py add_rls <app_label> <model_name> --fields tenant_id user_id"
+        "Creates a migration that adds a row-level security (RLS) policy to models.\n"
+        "Usage: manage.py add_rls <app_label>"
     )
 
     def add_arguments(self, parser):
         parser.add_argument(
             "app_label", type=str,
-            help="The Django app label where the model is defined."
-        )
-        parser.add_argument(
-            "model_name", type=str,
-            help="The name of the model (case insensitive) to add RLS to."
-        )
-        parser.add_argument(
-            "--fields", nargs="+", required=True,
-            help="List of fields to enforce RLS on (must be part of ENFORCE_FIELDS)."
+            help="The Django app label where the model(s) is defined."
         )
 
     def handle(self, *args, **options):
@@ -35,49 +30,69 @@ class Command(BaseCommand):
             django_settings, "DJANGO_RLS", DjangoRLSSettings()
         )
         app_label = options["app_label"]
-        model_name = options["model_name"]
-        enforce_fields = options["fields"]
 
-        model = self._get_model(app_label, model_name)
+        # Determine target models
+        app_config = apps.get_app_config(app_label)
+        models = list(app_config.get_models())
 
-        # Validate the requested fields
-        self._validate_fields(model, enforce_fields)
+        if not models:
+            self.stdout.write(self.style.WARNING(f"No models found in app '{app_label}'."))
+            return
 
-        migration_name = f"add_rls_policy_to_{model_name.lower()}"
+        # Filter models and prepare configuration
+        rls_config = {}
+        
+        # Check if app is in TENANT_APPS
+        is_tenant_app = app_label in self.rls_settings.TENANT_APPS
+        
+        if not is_tenant_app:
+             self.stdout.write(self.style.WARNING(f"App '{app_label}' is not in TENANT_APPS. Please add it to your settings to enable RLS generation."))
+             return
+
+        for model in models:
+            model_name = model.__name__
+            
+            # Determine fields for this model - check all RLS_FIELDS if present
+            # Use model._meta.get_field() to check for actual database fields,
+            # not just Python attributes
+            fields = []
+            for rls_field in self.rls_settings.RLS_FIELDS:
+                try:
+                    model._meta.get_field(rls_field)
+                    fields.append(rls_field)
+                except FieldDoesNotExist:
+                    # Field doesn't exist on this model, skip it
+                    continue
+            
+            if not fields:
+                # Skip models that don't have any RLS fields
+                continue
+
+            # Build using clause
+            using_clause = self._build_using_clause(model, fields)
+            rls_config[model_name] = using_clause
+
+        if not rls_config:
+            self.stdout.write(self.style.WARNING("No models matched criteria for RLS policy creation."))
+            return
+
+        # Generate migration
+        migration_name = f"add_rls_policies_to_{app_label}"
+
         self.stdout.write("Creating an empty migration...")
         call_command("makemigrations", app_label, "--empty", "--name", migration_name)
 
         filepath = self._locate_migration_file(app_label, migration_name)
         dependencies_line = self._extract_dependencies(filepath)
 
-        # Build the policy condition
-        condition = " AND ".join([
-            f"{field} = current_setting('{self.rls_settings.SESSION_NAMESPACE_PREFIX}.{field}')::{self._get_field_sql_type(model, field)}"
-            for field in enforce_fields
-        ])
-
-        migration_content = self._build_migration_content(app_label, model_name, dependencies_line, condition)
+        migration_content = self._build_migration_content(app_label, rls_config, dependencies_line)
 
         with open(filepath, "w") as f:
             f.write(migration_content)
 
-        self.stdout.write(self.style.SUCCESS(f"✅ Migration file created at {filepath}"))
-        self.stdout.write(self.style.SUCCESS(f"▶ Run `python manage.py migrate {app_label}` to apply RLS."))
+        self.stdout.write(self.style.SUCCESS(f"Migration file created at {filepath}"))
+        self.stdout.write(self.style.SUCCESS(f"Run `python manage.py migrate {app_label}` to apply RLS."))
 
-    def _get_model(self, app_label, model_name):
-        try:
-            model = apps.get_model(app_label, model_name)
-        except LookupError:
-            raise CommandError(f"Model '{model_name}' not found in app '{app_label}'.")
-
-        return model
-
-    def _validate_fields(self, model, enforce_fields):
-        for field in enforce_fields:
-            if field not in self.rls_settings.ENFORCE_FIELDS:
-                raise CommandError(f"Field '{field}' is not listed in ENFORCE_FIELDS.")
-            if not hasattr(model, field):
-                raise CommandError(f"Model does not have field '{field}'.")
 
     def _locate_migration_file(self, app_label, migration_name):
         app_config = apps.get_app_config(app_label)
@@ -85,6 +100,11 @@ class Command(BaseCommand):
         pattern = os.path.join(migrations_dir, f"*_{migration_name}.py")
         matches = glob.glob(pattern)
         if not matches:
+            # Fallback for truncated names or slightly different naming by django
+            # Try finding latest file
+            all_migrations = sorted(glob.glob(os.path.join(migrations_dir, "*.py")))
+            if all_migrations:
+                 return all_migrations[-1]
             raise CommandError(f"Could not locate migration file matching pattern: {pattern}")
         return matches[0]
 
@@ -94,81 +114,89 @@ class Command(BaseCommand):
         match = re.search(r"dependencies\s*=\s*(\[[^\]]*\])", content)
         return match.group(1) if match else "[]"
     
-    def _build_using_clause(self, model, fields: list[str]) -> str:
+    def _build_using_clause(self, model, fields: List[str]) -> str:
         """
         Constructs the RLS USING clause with wildcard and null handling for each field.
         Each field's condition is wrapped in a CASE statement and joined via AND.
         """
-        prefix = self.rls_settings.SESSION_NAMESPACE_PREFIX
-        clauses = []
-
+        field_types = {}
         for field in fields:
-            sql_type = self._get_field_sql_type(model, field)
-            clause = f"""(
-                CASE
-                    WHEN current_setting('{prefix}.{field}', true) IS NULL THEN FALSE
-                    WHEN current_setting('{prefix}.{field}') = '{RlsWildcard.NONE.value}' THEN FALSE
-                    WHEN current_setting('{prefix}.{field}') = '{RlsWildcard.ALL.value}' THEN TRUE
-                    ELSE {field} = current_setting('{prefix}.{field}')::{sql_type}
-                END
-            )"""
-            clauses.append(clause)
+            field_types[field] = get_field_sql_type(model, field)
+            
+        return build_rls_using_clause(
+            fields, 
+            field_types,
+            self.rls_settings.SESSION_NAMESPACE_PREFIX
+        )
 
-        return " AND\n".join(clauses)
+    def _build_migration_content(self, app_label: str, rls_config: dict, dependencies_line: str) -> str:
+        # rls_config is { "ModelName": "using_clause" }
+        
+        # Build config dict with proper escaping
+        config_items = []
+        for model, clause in rls_config.items():
+            # Use repr() to safely escape the clause string
+            # This handles any special characters, quotes, etc.
+            config_items.append(f"    {model!r}: {clause!r}")
+        config_str = "{\n" + ",\n".join(config_items) + "\n}"
 
+        template = '''"""
+Auto-generated RLS migration.
+"""
 
-    def _get_field_sql_type(self, model, field_name):
-        field = model._meta.get_field(field_name)
-        return {
-            "IntegerField": "int",
-            "BigIntegerField": "bigint",
-            "UUIDField": "uuid",
-            "CharField": "text",
-            "BooleanField": "boolean",
-        }.get(field.get_internal_type(), "text")  # fallback
+from django.db import migrations
+from django.db.backends.ddl_references import Statement, Table
+from django.apps import apps
 
-    def _build_migration_content(self, app_label: str, model_name: str, dependencies_line: str, using_clause: str) -> str:
-        return f'''"""
-    Auto-generated RLS migration for {model_name}.
-    """
+from django_rls.migrations import RunDynamicSQL
 
-    from django.db import migrations
-    from django.db.backends.ddl_references import Statement, Table
-    from django.apps import apps
+APP_LABEL = {app_label}
+RLS_CONFIG = {config_str}
 
-    from pegamento_sec.migrations import RunDynamicSQL
-
-    APP_LABEL = {app_label!r}
-    MODEL_NAME = {model_name!r}
-
-    def get_create_sql(schema_editor):
-        model = apps.get_model(APP_LABEL, MODEL_NAME)
+def get_create_sql(schema_editor):
+    statements = []
+    for model_name, using_clause in RLS_CONFIG.items():
+        model = apps.get_model(APP_LABEL, model_name)
         table_name = model._meta.db_table
         policy_name = f"{{table_name}}_rls_policy"
-        return str(Statement(
-            "CREATE POLICY %(policy_name)s ON %(table_name)s USING ({using_clause});"
+        # Format using_clause as single line for Statement template
+        using_clause_single_line = " ".join(using_clause.split())
+        stmt = Statement(
+            "DROP POLICY IF EXISTS %(policy_name)s ON %(table_name)s;"
+            "CREATE POLICY %(policy_name)s ON %(table_name)s FOR ALL USING (%(using_clause)s) WITH CHECK (%(using_clause)s);"
             "ALTER TABLE %(table_name)s ENABLE ROW LEVEL SECURITY;"
             "ALTER TABLE %(table_name)s FORCE ROW LEVEL SECURITY;",
             policy_name=policy_name,
             table_name=Table(table_name, schema_editor.quote_name),
-            using_clause=""" + '"""' + using_clause + '"""' + f"""
-        ))
+            using_clause=using_clause_single_line
+        )
+        statements.append(str(stmt))
+    return "\\n".join(statements)
 
-    def get_drop_sql(schema_editor):
-        model = apps.get_model(APP_LABEL, MODEL_NAME)
+def get_drop_sql(schema_editor):
+    statements = []
+    for model_name, _ in RLS_CONFIG.items():
+        model = apps.get_model(APP_LABEL, model_name)
         table_name = model._meta.db_table
         policy_name = f"{{table_name}}_rls_policy"
-        return str(Statement(
+        stmt = Statement(
             "ALTER TABLE %(table_name)s NO FORCE ROW LEVEL SECURITY;"
             "ALTER TABLE %(table_name)s DISABLE ROW LEVEL SECURITY;"
             "DROP POLICY IF EXISTS %(policy_name)s ON %(table_name)s;",
             policy_name=policy_name,
             table_name=Table(table_name, schema_editor.quote_name),
-        ))
+        )
+        statements.append(str(stmt))
+    return "\\n".join(statements)
 
-    class Migration(migrations.Migration):
-        dependencies = {dependencies_line}
-        operations = [
-            RunDynamicSQL(create_func=get_create_sql, drop_func=get_drop_sql),
-        ]
-    '''.replace("{using_clause}", using_clause)
+class Migration(migrations.Migration):
+    dependencies = {dependencies_line}
+    operations = [
+        RunDynamicSQL(create_func=get_create_sql, drop_func=get_drop_sql),
+    ]
+'''
+        return textwrap.dedent(template).format(
+            app_label=repr(app_label),
+            config_str=config_str,
+            dependencies_line=dependencies_line
+        )

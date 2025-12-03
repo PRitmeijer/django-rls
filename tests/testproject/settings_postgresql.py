@@ -1,3 +1,9 @@
+"""
+PostgreSQL test settings (redundant - kept for backwards compatibility).
+
+Note: The default settings.py now uses PostgreSQL by default.
+This file is kept for backwards compatibility but is no longer needed.
+"""
 import os
 from django_rls.settings_type import DjangoRLSSettings
 
@@ -48,7 +54,7 @@ TEMPLATES = [
     },
 ]
 
-# PostgreSQL database configuration (required for RLS testing)
+# PostgreSQL database configuration
 # Tests should use the runtime user (not migration user) to properly test RLS enforcement
 # The runtime user is subject to RLS policies, while the migration user has BYPASSRLS
 DATABASES = {
@@ -69,10 +75,6 @@ STATIC_URL = "/static/"
 # Django RLS Configuration
 DJANGO_RLS = DjangoRLSSettings(
     RLS_FIELDS=["tenant_id", "user_id"],
-    TENANT_APPS=["test_app"], # Use the app label "test_app" as defined in apps.py
-    # Configure migration user for running migrations during tests
-    # The migration hook will automatically switch to this user when running migrate/makemigrations
-    USE_DB_MIGRATION_USER=True,
-    MIGRATION_USER=os.environ.get("POSTGRES_MIGRATION_USER", os.environ.get("POSTGRES_USER", "testmigrate")),
-    MIGRATION_PASSWORD=os.environ.get("POSTGRES_MIGRATION_PASSWORD", os.environ.get("POSTGRES_PASSWORD", "testmigratepass")),
+    TENANT_APPS=["test_app"],  # Use the app label "test_app" as defined in apps.py
 )
+

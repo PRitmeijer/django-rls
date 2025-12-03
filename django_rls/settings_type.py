@@ -9,10 +9,14 @@ from typing import (
     List,
     Optional,
     TypeVar,
+    TYPE_CHECKING
 )
 
 from django_rls.constants import RLSValue
-from django_rls.resolvers import default_request_user_resolver, default_rls_bypass_check
+
+if TYPE_CHECKING:
+    # Import these only when type checking to avoid circular import at runtime
+    from django_rls.resolvers import default_request_user_resolver, default_rls_bypass_check
 
 T = TypeVar("T")
 
@@ -52,25 +56,24 @@ class DjangoRLSSettings:
     This includes dynamic policy generation, session binding, and model auto-filling.
     """
 
-    ENFORCE_FIELDS: List[str] = field(default_factory=list)
+    RLS_FIELDS: List[str] = field(default_factory=lambda: ["tenant_id", "user_id"])
     """
-    A global list of field names that are allowed to be enforced through PostgreSQL RLS.
-
-    These fields represent values like `tenant_id`, `user_id`, etc., that may be present
-    on multiple models. This list doesn't enforce RLS directly but defines which fields
-    are eligible for enforcement when creating RLS policies (e.g., through the `add_rls` command).
-
-    The actual models and fields to apply RLS to are chosen at command-line args in `manage.py add_rls`.
+    A list of field names to be set as PostgreSQL session variables.
+    These fields are extracted from the user/context by REQUEST_RESOLVER and set
+    as `rls.field_name` in the database session.
 
     Example:
-        ENFORCE_FIELDS = ["tenant_id", "user_id"]
-
-    PostgreSQL RLS policies will use session variables like:
-        current_setting('rls.tenant_id')
-        current_setting('rls.user_id')
+        RLS_FIELDS = ["tenant_id", "user_id"]
     """
 
-    REQUEST_RESOLVER: Callable[[Any], Dict[str, RLSValue]] = default_request_user_resolver
+    TENANT_APPS: List[str] = field(default_factory=list)
+    """
+    List of app labels where all models should be treated as tenant-specific.
+    When using `add_rls`, models in these apps will automatically default to using
+    `tenant_id` for RLS if the field exists.
+    """
+
+    REQUEST_RESOLVER: Callable[[Any], Dict[str, RLSValue]] = field(default_factory=lambda: _get_default_request_resolver())
     """
     A function that returns the current RLS context to set into PostgreSQL session variables.
 
@@ -88,20 +91,20 @@ class DjangoRLSSettings:
     You can plug in a Django request-based or Strawberry GraphQL resolver here.
     """
 
-    BYPASS_CHECK_RESOLVER: Callable[[Any], bool] = default_rls_bypass_check
+    BYPASS_CHECK_RESOLVER: Callable[[Any], bool] = field(default_factory=lambda: _get_default_bypass_check())
     """
     Optional function to determine if RLS should be bypassed entirely for a request or context.
 
-    If this returns True, all fields in ENFORCE_FIELDS will be set to RlsWildcard.ALL.
+    If this returns True, all fields in RLS_FIELDS will be set to RlsWildcard.ALL.
 
     Example use case:
         - Allow superusers to bypass RLS enforcement
         - Allow specific IPs or roles to see all data
     """
 
-    AUTO_SET_FIELDS: bool = False #TODO
+    AUTO_SET_FIELDS: bool = False
     """
-    If True, models listed in `ENFORCE_POLICIES` will have their scoped fields automatically
+    If True, models in TENANT_APPS will have their RLS fields automatically
     set on creation/save based on the current session context (as resolved by `REQUEST_RESOLVER`).
 
     For example, if a model requires `tenant_id` and `user_id`, and the current session provides:
@@ -111,9 +114,10 @@ class DjangoRLSSettings:
     This helps prevent accidental leaks or incomplete data in a multi-tenant system.
     """
 
-    SKIP_MODELS: Optional[List[str]]= field(default_factory=list) #TODO
+    SKIP_MODELS: Optional[List[str]]= field(default_factory=list)
     """
-    Optional list of model paths (e.g., `"app.Model"`) to explicitly exclude from Auto Set Field setting even if they match `ENFORCE_POLICIES`.
+    Optional list of model paths (e.g., `"app.Model"`) to explicitly exclude from AUTO_SET_FIELDS
+    even if they are in TENANT_APPS.
 
     Example:
         SKIP_MODELS = [
@@ -150,3 +154,11 @@ class DjangoRLSSettings:
     """
     Password for the MIGRATION_USER.
     """
+
+def _get_default_request_resolver():
+    from django_rls.resolvers import default_request_user_resolver
+    return default_request_user_resolver
+
+def _get_default_bypass_check():
+    from django_rls.resolvers import default_rls_bypass_check
+    return default_rls_bypass_check

@@ -1,0 +1,72 @@
+site_name: django-rls
+site_description: Django extension for PostgreSQL Row-Level Security (RLS)
+site_url: https://pritmeijer.github.io/django-rls/
+repo_url: https://github.com/pritmeijer/django-rls
+repo_name: pritmeijer/django-rls
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.annotate
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+  - markdownextradata
+  - minify:
+      minify_html: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+  - Configuration:
+    - Settings: configuration/settings.md
+    - Resolvers: configuration/resolvers.md
+  - Usage:
+    - Middleware: usage/middleware.md
+    - Adding RLS: usage/adding-rls.md
+    - Migrations: usage/migrations.md
+  - Advanced:
+    - Custom Resolvers: advanced/custom-resolvers.md
+    - Bypass Checks: advanced/bypass-checks.md
+  - API Reference: api/index.md
+
+strict: true
+

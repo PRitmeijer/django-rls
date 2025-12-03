@@ -15,8 +15,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_rls",
-    "tests.testproject.app",
-    "tests.testproject.regular_app",  # NOT in TENANT_APPS - should not get RLS
+    "testproject.app",
+    "testproject.regular_app",  # NOT in TENANT_APPS - should not get RLS
 ]
 
 MIDDLEWARE = [
@@ -30,7 +30,7 @@ MIDDLEWARE = [
     "django_rls.middleware.RLSMiddleware",
 ]
 
-ROOT_URLCONF = "tests.testproject.urls"
+ROOT_URLCONF = "testproject.urls"
 
 TEMPLATES = [
     {
@@ -76,3 +76,4 @@ DJANGO_RLS = DjangoRLSSettings(
     MIGRATION_USER=os.environ.get("POSTGRES_MIGRATION_USER", os.environ.get("POSTGRES_USER", "testmigrate")),
     MIGRATION_PASSWORD=os.environ.get("POSTGRES_MIGRATION_PASSWORD", os.environ.get("POSTGRES_PASSWORD", "testmigratepass")),
 )
+

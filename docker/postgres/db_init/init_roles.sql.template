@@ -1,0 +1,40 @@
+-- Create roles if they don't exist
+-- Note: POSTGRES_USER (${POSTGRES_USER}) is the migration user and is automatically created as superuser by PostgreSQL
+-- We only need to create the runtime user here
+DO $$
+BEGIN
+    -- Create runtime user (subject to RLS, used by Django app)
+    -- Grant CREATEDB so it can create test databases for Django tests
+    -- But NOBYPASSRLS so RLS policies are still enforced
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${POSTGRES_RUNTIME_USER}') THEN
+        CREATE ROLE ${POSTGRES_RUNTIME_USER} WITH LOGIN PASSWORD '${POSTGRES_RUNTIME_PASSWORD}' CREATEDB;
+    END IF;
+END $$;
+
+-- Ensure migration user (POSTGRES_USER) has all necessary superuser privileges
+-- This user needs to create RLS policies, manage roles, run migrations, etc.
+ALTER ROLE ${POSTGRES_USER} WITH SUPERUSER CREATEROLE CREATEDB REPLICATION BYPASSRLS;
+
+-- Ensure runtime user has correct privileges
+-- This user should be subject to RLS policies for proper enforcement (NOBYPASSRLS)
+-- But needs CREATEDB to create test databases for Django tests
+ALTER ROLE ${POSTGRES_RUNTIME_USER} WITH NOSUPERUSER NOCREATEROLE CREATEDB NOREPLICATION NOBYPASSRLS;
+
+-- Grant usage on public schema to the runtime user
+GRANT USAGE ON SCHEMA public TO ${POSTGRES_RUNTIME_USER};
+
+-- Grant data manipulation privileges on all existing tables in the public schema to the runtime user
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${POSTGRES_RUNTIME_USER};
+
+-- Grant privileges on all sequences in the public schema to the runtime user.
+-- Sequences are used for auto-incremented values (e.g., primary keys), so granting USAGE and SELECT allows the runtime user
+-- to obtain the next value (via nextval()) and read the current sequence value (via currval()), ensuring proper auto-increment behavior.
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${POSTGRES_RUNTIME_USER};
+
+-- Set default privileges so that future tables automatically grant data manipulation rights to the runtime user
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${POSTGRES_RUNTIME_USER};
+
+-- Set default privileges so that future sequences automatically grant usage and select rights to the runtime user
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO ${POSTGRES_RUNTIME_USER};

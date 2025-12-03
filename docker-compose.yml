@@ -1,18 +1,109 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:15
-    container_name: django_rls_test_pg
+  db:
+    build: ./docker/postgres
+    container_name: django_rls_db
     restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: testdb
-      POSTGRES_USER: testuser
-      POSTGRES_PASSWORD: testpass
+      - POSTGRES_DB=testdb
+      # Migration user (needs superuser privileges for migrations and RLS policies)
+      - POSTGRES_MIGRATION_USER=testmigrate
+      - POSTGRES_MIGRATION_PASSWORD=testmigratepass
+      # Runtime user (subject to RLS, used by Django app)
+      - POSTGRES_RUNTIME_USER=testuser
+      - POSTGRES_RUNTIME_PASSWORD=testuserpass
+      # POSTGRES_USER is required by PostgreSQL Docker image - creates initial bootstrap superuser
+      - POSTGRES_USER=testmigrate
+      - POSTGRES_PASSWORD=testmigratepass
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "testmigrate", "-d", "testdb"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+      timeout: 5s
+
+  web:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    container_name: django_rls_web
+    command: uv run python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./tests:/app/tests
+      - ./testproject:/app/testproject
+      - ./django_rls:/app/django_rls
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./uv.lock:/app/uv.lock
+    working_dir: /app/testproject
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - UV_PROJECT_ENVIRONMENT=/opt/venv
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=testdb
+      - POSTGRES_USER=testmigrate
+      - POSTGRES_PASSWORD=testmigratepass
+      - POSTGRES_RUNTIME_USER=testuser
+      - POSTGRES_RUNTIME_PASSWORD=testuserpass
+      - DJANGO_SETTINGS_MODULE=testproject.settings
+    restart: unless-stopped
+
+  test:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    container_name: django_rls_test
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./tests:/app/tests
+      - ./testproject:/app/testproject
+      - ./django_rls:/app/django_rls
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./uv.lock:/app/uv.lock
+    working_dir: /app
+    environment:
+      - UV_PROJECT_ENVIRONMENT=/opt/venv
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=testdb
+      - POSTGRES_USER=testmigrate
+      - POSTGRES_PASSWORD=testmigratepass
+      - POSTGRES_RUNTIME_USER=testuser
+      - POSTGRES_RUNTIME_PASSWORD=testuserpass
+      - DJANGO_SETTINGS_MODULE=testproject.settings
+    # No default command - run tests via: docker-compose run --rm test uv run pytest ...
+    restart: "no"
+    stdin_open: true
+    tty: true
+
+  pgadmin:
+    container_name: django_rls_pgadmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
+    volumes:
+      - pgadmin_data:/root/.pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pg_data:
+  pgadmin_data:
