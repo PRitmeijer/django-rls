@@ -172,7 +172,12 @@ def main() -> None:
     bump_version(release_file.type.value)
     bumped_version = get_current_version()
     token = os.getenv("BOT_TOKEN")
-    assert token
+    if not token:
+        msg = (
+            "BOT_TOKEN environment variable is not set. "
+            "Please ensure the BOT_TOKEN secret is configured in GitHub repository settings."
+        )
+        raise ValueError(msg)
     current_contributor = get_last_commit_contributor(token=token)
     contributor_details = get_contributor_details(current_contributor)
     pretty_changes = pprint_release_change_log(release_file, contributor_details)
