@@ -1,5 +1,11 @@
 CHANGELOG
 =========
+0.2.1 - 2025-12-03
+--------------------
+Edit github workflow
+
+Contributed by [Pim Ritmeijer](https://github.com/PRitmeijer) via [PR #10](https://github.com/pritmeijer/django-rls/pull/10/)
+
 0.2.0 - 2025-12-03
 --------------------
 Initial release of django-rls - a Django extension for PostgreSQL Row-Level Security (RLS).
@@ -13,5 +19,3 @@ Features:
 - Middleware-based RLS enforcement for Django views and GraphQL
 
 Contributed by [Pim Ritmeijer](https://github.com/PRitmeijer) via [PR #6](https://github.com/pritmeijer/django-rls/pull/6/)
-
-

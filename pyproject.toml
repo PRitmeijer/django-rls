@@ -2,7 +2,7 @@
 name = "django-rls"
 classifiers = [ "Environment :: Web Environment", "Intended Audience :: Developers", "License :: OSI Approved :: MIT License", "Operating System :: OS Independent", "Framework :: Django", "Programming Language :: Python :: 3.10", "Programming Language :: Python :: 3.11", "Programming Language :: Python :: 3.12", "Programming Language :: Python :: 3.13",]
 description = "Row Level Security for PostgreSQL with Strawberry for Django."
-version = "0.2.0"
+version = "0.2.1"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [ "Django>=4.2,<5.4", "django-stubs[compatible-mypy]>=4.2.0", "psycopg2-binary>=2.9", "questionary>=2.1.1",]
